@@ -86,7 +86,10 @@ export async function sendBookingNotification(
   // procesado, y republicar le duplicaría la notificación al cliente conectado.
   const inserted = await insertNotification(notification);
   if (!inserted) {
-    console.info("[sendBookingNotification]: already stored for", payload.eventId);
+    console.info(
+      "[sendBookingNotification]: already stored for",
+      payload.eventId,
+    );
     return;
   }
 
