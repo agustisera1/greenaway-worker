@@ -5,6 +5,15 @@ export const channels = {
     target ? `notifications:${target}` : "notifications:*", // Use wildcard for subscriptions
 };
 
+// A frame on `notifications:<userId>` that carries no content: the recipient
+// only needs their unread-messages badge bumped, and the message itself is
+// already in Mongo. `kind` is what tells it apart from a notification frame,
+// which publishes its whole document and has no such field — without it the
+// two badges would move together. Lo lee `isUnreadNudge` en la app
+// (components/notifications/provider.tsx), replicado a mano como el resto de
+// los contratos entre los dos repos.
+export type UnreadNudge = { kind: "message" };
+
 type RedisConnectionParams = {
   host: string;
   port: number;

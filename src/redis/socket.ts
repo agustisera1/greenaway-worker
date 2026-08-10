@@ -2,8 +2,17 @@ import { Redis } from "ioredis";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { authenticateHandshake, authorizeRoom } from "../chat/auth.js";
-import { EVENTS, JoinAck, SocketData } from "../chat/types.js";
-import { registerMessageFlow } from "../chat/message-flow.js";
+import {
+  ClientMessage,
+  DeliveredMessage,
+  EVENTS,
+  JoinAck,
+  MessageAck,
+  SocketData,
+} from "../chat/types.js";
+import { insertMessage, MessageDocument } from "../mongo/messages.mongo.js";
+import * as chatsRepo from "../mongo/chats.mongo.js";
+import { channels, publish, type UnreadNudge } from "./client.js";
 
 const url = process.env.REDIS_URL;
 if (!url) throw new Error("[redis]: Missing REDIS_URL");
@@ -55,5 +64,90 @@ io.on("connection", (socket) => {
   });
 
   // Steps 3–5: emit → persist → deliver.
-  registerMessageFlow(socket);
+  socket.on(
+    EVENTS.CLIENT_MESSAGE,
+    async (payload: ClientMessage, ack?: (res: MessageAck) => void) => {
+      // Step 3 — Emit: a client message arrived. The parties stored at join are
+      // the authorization: no entry for this room means the socket never joined
+      // it (or its ticket expired), so there's nothing to emit into.
+      const parties = socket.data.rooms.get(payload.chat_id);
+      if (!parties) {
+        console.error(
+          "[registerMessageFlow]: no authorized room for",
+          payload.chat_id,
+        );
+        return ack?.({ ok: false });
+      }
+
+      // The sender is whichever party the ticket was issued to — the client is
+      // never trusted to name it.
+      const senderId =
+        parties.current_party === "guest" ? parties.guest_id : parties.host_id;
+
+      // The chat document is born with the first message, not with the booking:
+      // a pending booking can carry questions before the host confirms it. Both
+      // party ids come from the ticket, so it doesn't matter which side speaks
+      // first — writing the sender into `guest_id` would be wrong half the time.
+      await chatsRepo.upsertChatByBookingId(payload.chat_id, {
+        booking_id: payload.chat_id,
+        guest_id: parties.guest_id,
+        host_id: parties.host_id,
+        started_at: new Date().toISOString(),
+      });
+
+      // Stamp the fields the client isn't trusted to set.
+      const message: MessageDocument = {
+        chat_id: payload.chat_id,
+        sender_id: senderId,
+        body: payload.body,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Step 4 — Persist: Mongo is the source of truth. Store before delivering
+      // so a delivered message always exists on refetch.
+      const stored = await insertMessage(message);
+      if (!stored) {
+        console.error("[registerMessageFlow]: message not persisted, dropping");
+        return ack?.({ ok: false });
+      }
+
+      // Step 5 — Deliver: broadcast to the rest of the room, then confirm to
+      // the sender.
+      const delivered: DeliveredMessage = {
+        ...message,
+        _id: stored.insertedId.toString(),
+      };
+      socket.to(payload.chat_id).emit(EVENTS.SERVER_MESSAGE, delivered);
+      ack?.({ ok: true, message: delivered });
+
+      // Step 6 — Nudge: the broadcast above only reaches sockets that joined
+      // this room, so a recipient on another screen would never know. Publish a
+      // bodiless frame that only bumps their unread badge — nothing is stored
+      // here, since the count is recomputed from the messages themselves.
+      const recipientId =
+        senderId === parties.guest_id ? parties.host_id : parties.guest_id;
+
+      try {
+        // Already in the room? Then the message just landed live, and counting
+        // it as unread would leave a badge nobody can clear. `fetchSockets`
+        // spans every node, so a recipient connected elsewhere counts too.
+        const room = await io.in(payload.chat_id).fetchSockets();
+        const present = room.some((s) => s.data.user?.user_id === recipientId);
+        if (present) return;
+
+        await publish(
+          channels.notifications(recipientId),
+          JSON.stringify({ kind: "message" } satisfies UnreadNudge),
+        );
+      } catch (error) {
+        // The sender was already acked, so this can't fail the send — and a
+        // dropped nudge only delays the badge until the next load, which
+        // recomputes it from Mongo.
+        console.error(
+          "[registerMessageFlow]: could not publish the unread nudge",
+          error,
+        );
+      }
+    },
+  );
 });
