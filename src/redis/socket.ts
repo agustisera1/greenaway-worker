@@ -12,6 +12,7 @@ import {
 } from "../chat/types.js";
 import { insertMessage, MessageDocument } from "../mongo/messages.mongo.js";
 import * as chatsRepo from "../mongo/chats.mongo.js";
+import { channels, publish, type UnreadNudge } from "./client.js";
 
 const url = process.env.REDIS_URL;
 if (!url) throw new Error("[redis]: Missing REDIS_URL");
@@ -118,6 +119,35 @@ io.on("connection", (socket) => {
       };
       socket.to(payload.chat_id).emit(EVENTS.SERVER_MESSAGE, delivered);
       ack?.({ ok: true, message: delivered });
+
+      // Step 6 — Nudge: the broadcast above only reaches sockets that joined
+      // this room, so a recipient on another screen would never know. Publish a
+      // bodiless frame that only bumps their unread badge — nothing is stored
+      // here, since the count is recomputed from the messages themselves.
+      const recipientId =
+        senderId === parties.guest_id ? parties.host_id : parties.guest_id;
+
+      try {
+        // Already in the room? Then the message just landed live, and counting
+        // it as unread would leave a badge nobody can clear. `fetchSockets`
+        // spans every node, so a recipient connected elsewhere counts too.
+        const room = await io.in(payload.chat_id).fetchSockets();
+        const present = room.some((s) => s.data.user?.user_id === recipientId);
+        if (present) return;
+
+        await publish(
+          channels.notifications(recipientId),
+          JSON.stringify({ kind: "message" } satisfies UnreadNudge),
+        );
+      } catch (error) {
+        // The sender was already acked, so this can't fail the send — and a
+        // dropped nudge only delays the badge until the next load, which
+        // recomputes it from Mongo.
+        console.error(
+          "[registerMessageFlow]: could not publish the unread nudge",
+          error,
+        );
+      }
     },
   );
 });
