@@ -80,7 +80,7 @@ worker se indexe por esos literales; si llega un `processorKey` sin handler, el 
 reintenta).
 
 **`processorKey` vs. una variación del mismo trabajo.** El `processorKey` distingue *trabajos distintos*
-(mandar un mail vs. sincronizar a Elasticsearch). Variaciones del **mismo** trabajo — misma plantilla,
+(mandar un mail vs. crear una notificación in-app). Variaciones del **mismo** trabajo — misma plantilla,
 distinta copy según el estado — **no** son un `processorKey` nuevo: van con un campo discriminante en el
 payload. Ej.: los mails `pending` / `approved` / `rejected` / `updated` / `cancelled` son todos el mismo
 `notify-booking` con distinto `type`, no cinco processors. Un `processorKey` nuevo solo se justifica si el
@@ -174,7 +174,7 @@ async function notifyBooking(job: Job) {
 
 Tomá una decisión primero: **¿entra en una cola existente o necesita una nueva?**
 Misma familia de trabajo (otro tipo de mail) → cola existente, nuevo `processorKey`.
-Familia distinta con distinto perfil de retry/concurrencia (ej. sync a Elasticsearch) → cola nueva.
+Familia distinta con distinto perfil de retry/concurrencia (ej. procesar fotos subidas) → cola nueva.
 
 ### En el producer (esta app)
 

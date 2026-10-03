@@ -1,12 +1,9 @@
 <!--
-Dos secciones, nada más. Lo que ya vive en el ticket (criterio de aceptación,
-fuera de alcance, "si esto escalara") no se repite acá — se enlaza arriba.
-Si algo extra vale la pena, va como una línea suelta al final, no como sección.
-
-Los tickets viven en el repo `bookings_app`, bajo docs/tickets/.
+Dos secciones, nada más. Si algo extra vale la pena, va como una línea suelta
+al final, no como sección.
 -->
 
-<!-- Contexto: ticket TD-XX (en bookings_app) y, si aplica, el PR hermano. -->
+<!-- Contexto: si aplica, el PR hermano en bookings_app. -->
 
 ## Qué cambia
 

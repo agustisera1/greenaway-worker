@@ -12,8 +12,7 @@ Next.js (serverless) no puede sostener por sí misma:
 
 Las dos cosas necesitan un **proceso siempre encendido**: socket.io sostiene conexiones abiertas y los
 consumers de BullMQ son loops de vida larga. Eso descarta un runtime serverless (que se muere entre
-requests), y es exactamente lo que justifica separar este proceso de la app. La decisión completa está
-en el ADR de deploy del repo principal (`bookings_app/docs/tickets/TD-13-deploy-target.md`).
+requests), y es exactamente lo que justifica separar este proceso de la app.
 
 ## Arquitectura
 
@@ -79,6 +78,4 @@ que ella firma.
 
 ## Backlog y decisiones
 
-Este repo **no tiene backlog propio**: el backlog priorizado y los ADRs viven en el repo de la app
-(`bookings_app/docs/`). Los tickets que tocan este proceso están marcados con
-`Repos: … + bookings-worker`.
+Los ADRs y la deuda técnica viven en el repo de la app (`bookings_app/docs/`).

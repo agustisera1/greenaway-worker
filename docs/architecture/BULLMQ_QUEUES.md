@@ -12,8 +12,7 @@ Léela completa antes de escribir código de colas.
 ## Panorama
 
 **La app ya no encola.** Desde el outbox pattern, el único productor es el relay del worker; Next.js
-solo escribe una fila en Postgres. El porqué está en `docs/insights/OUTBOX_AND_SAGA.md` (repo de la
-app); acá va cómo queda el cableado.
+solo escribe una fila en Postgres. Acá va cómo queda el cableado.
 
 ```mermaid
 flowchart LR
@@ -84,7 +83,7 @@ recibe su tipo exacto, sin castear— y el `default` lo asigna a `never`, así q
 compila**. Si igual llegara uno desconocido por la cola, tira (y BullMQ reintenta).
 
 **`processorKey` vs. una variación del mismo trabajo.** El `processorKey` distingue *trabajos distintos*
-(mandar un mail vs. sincronizar a Elasticsearch). Variaciones del **mismo** trabajo — misma plantilla,
+(mandar un mail vs. crear una notificación in-app). Variaciones del **mismo** trabajo — misma plantilla,
 distinta copy según el estado — **no** son un `processorKey` nuevo: van con un campo discriminante en el
 payload. Ej.: los mails `pending` / `approved` / `rejected` / `cancelled` son todos el mismo
 `notify-booking` con distinto `type`, no cuatro processors.
@@ -182,7 +181,7 @@ export async function emailsProcessor(job: Job) {
 
 Tomá una decisión primero: **¿entra en una cola existente o necesita una nueva?**
 Misma familia de trabajo (otro tipo de mail) → cola existente, nuevo `processorKey`.
-Familia distinta con distinto perfil de retry/concurrencia (ej. sync a Elasticsearch) → cola nueva.
+Familia distinta con distinto perfil de retry/concurrencia (ej. procesar fotos subidas) → cola nueva.
 
 ### En la app
 
