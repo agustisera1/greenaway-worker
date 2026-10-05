@@ -17,7 +17,7 @@ export async function greetUser(payload: GreetingPayload) {
 
   await sendEmail("greetUser", {
     to: payload.email, // Just signed up email
-    subject: "Welcome to bookings app!",
+    subject: "Welcome to Greenaway!",
     html: greetingEmailHtml(payload),
   });
 }
