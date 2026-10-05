@@ -2,7 +2,7 @@
 
 Deuda del entorno de build/verificación, no del código de dominio. La deuda funcional de cada
 feature vive scopeada aparte (la de chat, en
-`bookings_app/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`).
+`greenaway/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`).
 
 ---
 
@@ -13,6 +13,6 @@ imports sin usar solo se detectan a ojo. Poner la misma config del producer ser�
 
 ## 🟡 Sin tests
 
-Ninguna de las piezas puras (`buildNotification`, `findChatParties`, los templates) tiene tests,
+Ninguna de las piezas puras (`buildNotification`, los templates) tiene tests,
 aunque están escritas justamente para ser testeables sin levantar Redis/Mongo. Es el retorno más
 barato disponible en este repo.

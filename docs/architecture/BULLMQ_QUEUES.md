@@ -60,8 +60,8 @@ Un payload cruza un boundary de proceso y se **serializa a JSON** en Redis. Por 
 
 - **Worker:** una sola var `REDIS_URL`, leída directo en cada cliente (`src/redis/workers.ts`,
   `src/redis/queues.ts`, `src/redis/client.ts`, `src/redis/socket.ts`).
-- **App:** ya no conecta a Redis para colas. `getRedisConnectionParams()` (`lib/redis-config.ts`) sigue
-  vivo para el subscriber SSE (`lib/subscriber.ts`) y la cota de abuso (`lib/redis.ts`).
+- **App:** ya no conecta a Redis para colas. `getRedisConnectionParams()` (`lib/infra/redis-config.ts`) sigue
+  vivo para el subscriber SSE (`lib/infra/subscriber.ts`) y la cota de abuso (`lib/infra/redis.ts`).
 
 ### Nombres de cola
 
@@ -95,10 +95,10 @@ payload. Ej.: los mails `pending` / `approved` / `rejected` / `cancelled` son to
 ### App — la escritura y su fila
 
 El service decide el `event_type` (es vocabulario de dominio); el repo lo escribe en la misma
-transacción que la entidad, con un CTE:
+transacción que la entidad (`insertOutboxEvent` recibe la transacción del repo):
 
 ```ts
-// lib/services/bookings.ts
+// lib/bookings/actions.ts
 await bookingsRepo.updateBooking(
   bookingId,
   { status: "accepted" },
@@ -106,7 +106,7 @@ await bookingsRepo.updateBooking(
 );
 ```
 
-Los `OutboxEventType` válidos viven en `lib/types/outbox.ts`. **Agregar uno obliga a enseñárselo al
+Los `OutboxEventType` válidos viven en `lib/outbox/types.ts`. **Agregar uno obliga a enseñárselo al
 resolver de su agregado en el worker**: un tipo que no conoce se descarta con un log.
 
 ### Worker — el fan-out (`src/outbox/fan-out.ts`)
@@ -185,9 +185,9 @@ Familia distinta con distinto perfil de retry/concurrencia (ej. procesar fotos s
 
 ### En la app
 
-1. **Agregá el `OutboxEventType`** en `lib/types/outbox.ts`.
-2. **Escribí la fila en la misma transacción** que la entidad, con el CTE del repo correspondiente
-   (`createBookingRecord` / `updateBooking` / `createUser` son los modelos). Payload thin: sólo ids.
+1. **Agregá el `OutboxEventType`** en `lib/outbox/types.ts`.
+2. **Escribí la fila en la misma transacción** que la entidad, con `insertOutboxEvent` dentro de la
+   transacción del repo (`insertBooking` / `updateBooking` / `insertUser` son los modelos). Payload thin: sólo ids.
 3. **`tsc` + `lint`** verde.
 
 ### En el worker
@@ -273,7 +273,7 @@ nada. Hoy `processed_events` es booleano (existe = procesado); cubrir ese caso p
 
 ## Checklist rápido
 
-**Fila de outbox:** thin (sólo ids) · en la misma transacción que la entidad · `event_type` en `lib/types/outbox.ts`.
+**Fila de outbox:** thin (sólo ids) · en la misma transacción que la entidad · `event_type` en `lib/outbox/types.ts`.
 **Payload:** mínimo · JSON-safe · fechas ISO · sin secretos · `processorKey` literal · `eventId`.
 **Relay:** el verbo en el resolver de su agregado (`getUserJob`/`getBookingJob`) · `jobId` determinístico · `null` si el agregado no está.
 **Consumer:** un archivo por evento (`src/<cola>/<evento>.ts`) · su `case` en el switch de la cola · el payload en la unión · sin secretos que loguear.

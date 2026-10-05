@@ -3,7 +3,7 @@ Dos secciones, nada más. Si algo extra vale la pena, va como una línea suelta
 al final, no como sección.
 -->
 
-<!-- Contexto: si aplica, el PR hermano en bookings_app. -->
+<!-- Contexto: si aplica, el PR hermano en greenaway. -->
 
 ## Qué cambia
 

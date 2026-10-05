@@ -1,11 +1,13 @@
 import type { PgUser } from "../pg/index.js";
+import { findBookingById } from "../pg/bookings.pg.js";
+import { findListingById } from "../mongo/listings.mongo.js";
 import type { BookingParty } from "../events.js";
 import type { AppSocket } from "./types.js";
 import jwt from "jsonwebtoken";
 
 export type Role = "guest" | "host";
-// Claims the app signs into the access token (see `createAccessToken` in
-// bookings_app/lib/services/auth.ts). Careful: the user id travels as
+// Claims the app signs into the access token (see `setAccessToken` in
+// greenaway/lib/auth/actions.ts). Careful: the user id travels as
 // `user_id`, not `id` — this is the wire contract, not the `users` row.
 export type CurrentUser = Pick<PgUser, "email" | "name" | "is_host"> & {
   user_id: string;
@@ -13,14 +15,12 @@ export type CurrentUser = Pick<PgUser, "email" | "name" | "is_host"> & {
   roles: Role[];
 };
 
-// Both party ids of a booking's chat plus which side the ticket holder is. The
-// app signs this whole object into the join ticket. Mirrors ChatParties in
-// bookings_app/lib/types/booking.ts — replicated by hand, same as the payloads.
+// Both party ids of a booking's chat plus which side the joined socket is on.
 export type ChatParties = {
   chat_id: string;
   host_id: string;
   guest_id: string;
-  current_party: BookingParty | null;
+  current_party: BookingParty;
 };
 
 const JWT_SECRET = process.env.JWT_SECRET!;
@@ -48,28 +48,32 @@ export async function authenticateHandshake(
   }
 }
 
-// Step 2 — Join Room: Authorize. The ticket is a signed ChatParties the app
-// minted after running the rule; the worker only verifies its signature and
-// that it names a party — no PG, no Mongo, no rule. The room to join is the
-// ticket's own chat_id. Returns the parties to store, or null to refuse.
-export function authorizeRoom(ticket?: string): ChatParties | null {
-  if (!ticket) {
-    console.error("[authorizeRoom]: no ticket provided");
-    return null;
-  }
+// Step 2 — Join Room: Authorize. The user must be the booking's guest or its
+// listing's host; the parties are stored per room for the message flow to reuse.
+export async function authorizeRoom(
+  user: CurrentUser | undefined,
+  bookingId: unknown,
+): Promise<ChatParties | null> {
+  if (!user || typeof bookingId !== "string") return null;
 
-  let parties: ChatParties;
   try {
-    parties = verifyToken(ticket) as ChatParties;
-  } catch {
-    console.error("[authorizeRoom]: invalid or expired ticket");
+    const booking = await findBookingById(bookingId);
+    if (!booking) return null;
+    const listing = await findListingById(booking.listing_id);
+    if (!listing) return null;
+
+    const party: BookingParty | null =
+      booking.guest_id === user.user_id ? "guest" : listing.host_id === user.user_id ? "host" : null;
+    if (!party) return null;
+
+    return {
+      chat_id: booking.id,
+      host_id: listing.host_id,
+      guest_id: booking.guest_id,
+      current_party: party,
+    };
+  } catch (error) {
+    console.error("[authorizeRoom]: could not resolve the booking", error);
     return null;
   }
-
-  if (!parties.current_party) {
-    console.error("[authorizeRoom]: ticket names no party", parties.chat_id);
-    return null;
-  }
-
-  return parties;
 }

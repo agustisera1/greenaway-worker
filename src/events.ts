@@ -15,7 +15,7 @@ export type ListingLocation = {
 };
 
 // The two parties to a booking. Mirrors BookingParty in the app
-// (lib/types/booking.ts).
+// (lib/bookings/types.ts).
 export type BookingParty = "guest" | "host";
 
 export type Booking = {

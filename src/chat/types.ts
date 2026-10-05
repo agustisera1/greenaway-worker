@@ -8,7 +8,7 @@ import type { CurrentUser, ChatParties } from "./auth.js";
 export type { MessageDocument };
 
 // What a client sends on `events.clientMessage`: only the room and the body.
-// The server stamps _id, sender_id (from the join ticket) and timestamp before
+// The server stamps _id, sender_id (from the join) and timestamp before
 // persisting — clients don't get to set those.
 export type ClientMessage = {
   chat_id: string;
@@ -16,7 +16,7 @@ export type ClientMessage = {
 };
 
 // `user`: attached by the handshake middleware (step 1). `rooms`: the verified
-// ticket parties per joined chat, keyed by chat_id — one singleton socket serves
+// parties per joined chat, keyed by chat_id — one singleton socket serves
 // every conversation, so the sender check looks up the room a message targets.
 export type SocketData = {
   user?: CurrentUser;

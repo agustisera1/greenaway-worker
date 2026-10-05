@@ -1,4 +1,4 @@
-# Bookings App Worker — CLAUDE.md
+# Greenaway Worker — CLAUDE.md
 
 Proceso **worker** (Node, aparte de la app Next.js) para el marketplace de reservas. Es el
 consumidor asíncrono del sistema: procesa jobs de las colas BullMQ (emails, notificaciones in-app),
@@ -7,13 +7,15 @@ host↔guest.
 
 ## Relación con la app principal (repo hermano)
 
-Este repo es el **consumer**; la app Next.js (`bookings_app`) es el **producer**. Los dos procesos
+Este repo es el **consumer**; la app Next.js (`greenaway`) es el **producer**. Los dos procesos
 **no comparten código por import**: se hablan **solo** a través del **payload JSON** que viaja por la
 cola (o del canal Redis / evento socket.io). Por eso:
 
-- **El payload es el contrato.** Los tipos `*Payload` se **replican a mano** en ambos repos (acá en
-  `src/events.ts`, en el producer en `lib/events.ts`). Cambiar un contrato es un cambio en los dos
-  lados a la vez — ver la **regla del contrato espejo** en `docs/architecture/BULLMQ_QUEUES.md`.
+- **Los contratos se replican a mano.** Con la app se comparten dos: la **fila de outbox** (la app la
+  escribe, `OutboxEventType` en `lib/outbox/types.ts`; el relay de acá la lee) y los **eventos del chat**
+  (`src/chat/types.ts` ↔ `lib/chat/socket.ts`). Los payloads de BullMQ (`src/events.ts`) viven solo acá.
+  Cambiar un contrato compartido es un cambio en los dos lados a la vez — ver la **regla del contrato
+  espejo** en `docs/architecture/BULLMQ_QUEUES.md`.
 - **Antes de tocar colas o payloads, leer `docs/architecture/BULLMQ_QUEUES.md`** (copia idéntica a la
   del producer). Define reglas del payload, `processorKey`, y el paso a paso en ambos lados.
 - La decisión de transporte en tiempo real (SSE para notificaciones, socket.io para chat, Redis
@@ -26,7 +28,7 @@ de una línea). Y va **scopeada a lo que la genera**:
 
 | Deuda | Dónde |
 |-------|-------|
-| De una feature (chat, notificaciones) | En el doc de esa feature, en el **producer**: `bookings_app/docs/tech_debt/<FEATURE>_NEXT_STEPS.md`. La feature cruza los dos repos, así que se documenta una sola vez, del lado que la orquesta |
+| De una feature (chat, notificaciones) | En el doc de esa feature, en el **producer**: `greenaway/docs/tech_debt/<FEATURE>_NEXT_STEPS.md`. La feature cruza los dos repos, así que se documenta una sola vez, del lado que la orquesta |
 | De build/verificación de este repo | `docs/tech_debt/TOOLING.md` |
 
 ## Stack
@@ -65,7 +67,7 @@ src/
     client.ts           Pub client + `channels` + `publish()` (fan-out de notificaciones a SSE).
     queues.ts           Queues BullMQ (emails, notifications) + defaultJobOptions.
     workers.ts          Workers BullMQ (emails, notifications). Conexión por REDIS_URL, autorun:false.
-    socket.ts           Server socket.io + redis-adapter + CORS. Cablea el handshake (io.use), los joins por ticket (JOIN_CHAT/LEAVE_CHAT) y el message flow.
+    socket.ts           Server socket.io + redis-adapter + CORS. Cablea el handshake (io.use), los joins con chequeo de membresía (JOIN_CHAT/LEAVE_CHAT) y el message flow.
 
   outbox/
     fan-out.ts          Una fila de outbox -> los QueuedJob que dispara. Rutea por agregado (getUserJob/getBookingJob) y adentro por verbo.
@@ -142,9 +144,9 @@ Igual que en el producer, el acceso a datos se aísla:
 
 - `pg/index.ts` / `mongo/index.ts` → **conexión** + helper de bajo nivel (`query<R>()`, cliente Mongo).
 - **Un archivo por feature**, nombrado con la DB como sufijo: `users.pg.ts`, `bookings.pg.ts`,
-  `listings.mongo.ts`, `messages.mongo.ts`, `chats.mongo.ts`. Espejo de `lib/repositories/*` en el
-  producer. **No** un `repository.ts` por DB con todo adentro: eso mezcla features que no tienen nada
-  que ver entre sí y crece sin límite.
+  `listings.mongo.ts`, `messages.mongo.ts`, `chats.mongo.ts`. Mismo criterio que el producer, donde
+  cada service tiene su `repository.ts`. **No** un repositorio por DB con todo adentro: eso mezcla
+  features que no tienen nada que ver entre sí y crece sin límite.
 - **Una función por operación**, sin lógica de negocio y sin `authorize`.
 - Cada archivo **posee el tipo de su documento** (`ListingDocument`, `ChatDocument`, …) y expone un
   `getCollection()` privado, para no repetir el nombre de la DB en cada función.
@@ -236,7 +238,7 @@ realtime del producer).
 - **PG**: `PGUSER/PGPASSWORD/PGHOST/PGPORT/PGDATABASE`. **Mongo**: `MONGODB_URI`. **Resend**:
   `RESEND_API_KEY`. **Email**: `EMAIL_FROM`, `DEV_MODE`, `DEV_EMAIL_TO`. **Socket**: `SOCKET_PORT`,
   `CLIENT_ORIGIN`. **Chat auth**: `JWT_SECRET` — el mismo secreto con que el producer firma el JWT del
-  handshake y el ticket de join; `chat/auth.ts` solo verifica con él.
+  handshake; `chat/auth.ts` solo verifica con él.
 - Cada cliente (pool PG, promise Mongo, pub client, Resend) es **module-level singleton**: se crea una
   vez al importar el módulo.
 
@@ -281,13 +283,12 @@ El chat corre sobre **dos credenciales distintas**, y esa separación es el dise
 - **Handshake (paso 1) — autentica *quién*.** `io.use(authenticateHandshake)` (`redis/socket.ts`) corre
   una vez por conexión: verifica el JWT de `socket.handshake.auth.token` con `JWT_SECRET` y cuelga el
   usuario en `socket.data`. Sin token válido, la conexión se rechaza.
-- **Ticket de join (paso 2) — autoriza *qué*.** El join no viaja en el handshake porque el socket se
-  conecta una vez y el cliente cambia de booking después. El **producer** corre la regla de ownership y
-  firma un `ChatParties` (chat_id + ambas partes + qué lado es el portador); el worker solo verifica la
-  firma y que nombre una parte (`authorizeRoom`) — **sin PG, sin Mongo, sin regla**. La room es el
-  `chat_id` del ticket; las partes verificadas quedan por room en `socket.data.rooms`.
-- **Message flow (pasos 3–5).** Las partes guardadas al join son la autorización. El `sender_id` sale del
-  ticket, nunca del cliente. El documento de chat nace con el primer mensaje (`upsertChatByBookingId`), no
+- **Join (paso 2) — autoriza *qué*.** El join no viaja en el handshake porque el socket se conecta una
+  vez y el cliente cambia de booking después. El cliente manda el `bookingId`; `authorizeRoom` busca la
+  reserva en PG y su listing en Mongo, y deja entrar solo al guest o al host. La room es el id de la
+  reserva; las partes (`ChatParties`) quedan por room en `socket.data.rooms`.
+- **Message flow (pasos 3–5).** Las partes guardadas al join son la autorización. El `sender_id` sale de
+  ellas, nunca del cliente. El documento de chat nace con el primer mensaje (`upsertChatByBookingId`), no
   con el booking. Se **persiste antes de emitir** (`insertMessage` → broadcast); al emisor se lo excluye
   del broadcast y recibe el `_id` real por `ack` para reemplazar el temporal que pintó optimista.
 

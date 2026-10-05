@@ -1,5 +1,5 @@
 {
-  "name": "bookings-worker",
+  "name": "greenaway-worker",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
   "keywords": [],
   "author": "Agustín Tisera",
   "license": "UNLICENSED",
-  "description": "Proceso persistente de Bookings App: consumers de BullMQ (emails, notificaciones) y servidor socket.io del chat.",
+  "description": "Proceso persistente de Greenaway: consumers de BullMQ (emails, notificaciones) y servidor socket.io del chat.",
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.1",
