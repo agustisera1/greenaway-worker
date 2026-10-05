@@ -1,7 +1,7 @@
 import mongo from "./index.js";
 
 // One chat per booking. `started_at` (not `started`) is the field name the app
-// reads — see `ChatDocument` in bookings_app/lib/types/chat.ts. The two repos
+// reads — see `ChatDocument` in greenaway/lib/chat/types.ts. The two repos
 // deploy separately, so this shape is part of the hand-replicated contract.
 export type ChatDocument = {
   booking_id: string;
@@ -15,13 +15,6 @@ async function getCollection() {
   return client.db("chatsdb").collection<ChatDocument>("chats");
 }
 
-export async function findChatByBookingId(bookingId: string) {
-  const collection = await getCollection();
-  const document = await collection.findOne({ booking_id: bookingId });
-  if (!document) return null;
-  return { ...document, _id: document._id.toString() };
-}
-
 /**
  * Insert the chat for `bookingId` only if it isn't there yet. `$setOnInsert`
  * leaves an existing document untouched, so re-sending never rewrites
@@ -30,7 +23,7 @@ export async function findChatByBookingId(bookingId: string) {
  * Careful: this narrows the race a find-then-insert opens, but doesn't close
  * it — Mongo only makes an upsert atomic when a **unique index** covers the
  * filter, and `chats.booking_id` has none yet. See
- * `bookings_app/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`.
+ * `greenaway/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`.
  */
 export async function upsertChatByBookingId(
   bookingId: string,

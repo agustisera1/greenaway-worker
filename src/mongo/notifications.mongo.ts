@@ -1,4 +1,4 @@
-import { MongoServerError, WithId } from "mongodb";
+import { MongoServerError } from "mongodb";
 import mongo from "./index.js";
 
 export type NotificationDocumentPayload = {
@@ -14,8 +14,6 @@ export type NotificationDocumentPayload = {
   body: string;
   is_read: boolean;
 };
-
-export type NotificationDocument = WithId<NotificationDocumentPayload>;
 
 async function getCollection() {
   const client = await mongo;

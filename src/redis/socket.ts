@@ -42,15 +42,12 @@ io.use(authenticateHandshake);
 io.on("connection", (socket) => {
   socket.data.rooms = new Map();
 
-  // Step 2 — Join Room: Authorize. The join can't ride the handshake: the socket
-  // connects once, while the client learns (and changes) which booking it shows
-  // afterwards. The handshake authenticates *who*; the ticket authorizes *what*,
-  // and names its own room. On success the parties are stashed per room for the
-  // message flow to reuse.
+  // Step 2 — Join Room: Authorize. It can't ride the handshake: the socket connects
+  // once, while the booking it shows changes afterwards.
   socket.on(
     EVENTS.JOIN_CHAT,
-    (ticket: string, ack?: (res: JoinAck) => void) => {
-      const parties = authorizeRoom(ticket);
+    async (bookingId: string, ack?: (res: JoinAck) => void) => {
+      const parties = await authorizeRoom(socket.data.user, bookingId);
       if (!parties) return ack?.({ ok: false });
       socket.join(parties.chat_id);
       socket.data.rooms.set(parties.chat_id, parties);
@@ -68,8 +65,7 @@ io.on("connection", (socket) => {
     EVENTS.CLIENT_MESSAGE,
     async (payload: ClientMessage, ack?: (res: MessageAck) => void) => {
       // Step 3 — Emit: a client message arrived. The parties stored at join are
-      // the authorization: no entry for this room means the socket never joined
-      // it (or its ticket expired), so there's nothing to emit into.
+      // the authorization: no entry means the socket never joined this room.
       const parties = socket.data.rooms.get(payload.chat_id);
       if (!parties) {
         console.error(
@@ -79,15 +75,13 @@ io.on("connection", (socket) => {
         return ack?.({ ok: false });
       }
 
-      // The sender is whichever party the ticket was issued to — the client is
-      // never trusted to name it.
+      // The sender is whichever party joined — the client never names it.
       const senderId =
         parties.current_party === "guest" ? parties.guest_id : parties.host_id;
 
       // The chat document is born with the first message, not with the booking:
       // a pending booking can carry questions before the host confirms it. Both
-      // party ids come from the ticket, so it doesn't matter which side speaks
-      // first — writing the sender into `guest_id` would be wrong half the time.
+      // party ids come from the join, so it doesn't matter which side speaks first.
       await chatsRepo.upsertChatByBookingId(payload.chat_id, {
         booking_id: payload.chat_id,
         guest_id: parties.guest_id,

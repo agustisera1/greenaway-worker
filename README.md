@@ -1,6 +1,6 @@
-# ⚙️ bookings-worker
+# ⚙️ greenaway-worker
 
-Proceso persistente de **Bookings App** (repo principal: `bookings_app`) — hace todo lo que la app
+Proceso persistente de **Greenaway** (repo principal: `greenaway`) — hace todo lo que la app
 Next.js (serverless) no puede sostener por sí misma:
 
 - **Consumers de BullMQ** — envían los emails de reserva y arman las notificaciones in-app, de forma
@@ -18,29 +18,30 @@ requests), y es exactamente lo que justifica separar este proceso de la app.
 
 ```mermaid
 flowchart LR
-  APP["bookings_app<br/>(encola jobs)"] -->|BullMQ| RD[(Redis)]
-  RD --> WK["bookings-worker"]
+  APP["greenaway<br/>(encola jobs)"] -->|BullMQ| RD[(Redis)]
+  RD --> WK["greenaway-worker"]
   CL[Cliente] <-->|socket.io| WK
   WK --> PG[(PostgreSQL)] & MG[(MongoDB)]
 ```
 
 - **Consume** de las colas `emails` y `notifications` en Redis; **no** encola nada (eso lo hace la app).
-- **Sirve** el chat por socket.io: handshake autenticado por token + un ticket firmado que autoriza el
-  room. El worker solo verifica la firma; la regla de quién entra vive en la app.
+- **Sirve** el chat por socket.io: handshake autenticado por token; al unirse a un room verifica en
+  PostgreSQL y MongoDB que el usuario sea el guest o el host de esa reserva.
 - **Lee** PostgreSQL y MongoDB para rehidratar datos de notificaciones y persistir mensajes.
 
 El *por qué* del transporte realtime está en
-`bookings_app/docs/architecture/REAL_TIME_TRANSPORT_AND_FAN_OUT.md`.
+`greenaway/docs/architecture/REAL_TIME_TRANSPORT_AND_FAN_OUT.md`.
 
 ## Contratos espejo — ojo acá
 
 Los dos repos se hablan **solo por contratos replicados a mano** (no hay paquete compartido). La fuente
 de verdad es el repo de la app; este repo mantiene copias:
 
-- **Payloads de BullMQ** (`src/events.ts`) ← espejo de `bookings_app/lib/events.ts`. La regla completa
-  y las convenciones están en [`BULLMQ_QUEUES.md`](./BULLMQ_QUEUES.md) (copia idéntica en ambos repos).
-- **Contrato de chat** (`src/chat/types.ts`: `EVENTS`, `ClientMessage`, `MessageAck`, `ChatParties`) ←
-  espejo de `bookings_app/lib/socket.ts`.
+- **Fila de outbox**: la app la escribe (`OutboxEventType` en `greenaway/lib/outbox/types.ts`) y el
+  relay de acá la convierte en jobs. Los payloads de BullMQ (`src/events.ts`) viven solo en este repo.
+  La regla completa está en [`BULLMQ_QUEUES.md`](./docs/architecture/BULLMQ_QUEUES.md) (copia idéntica en ambos repos).
+- **Contrato de chat** (`src/chat/types.ts`: `EVENTS`, `ClientMessage`, `MessageAck`) ← espejo de
+  `greenaway/lib/chat/socket.ts`.
 
 Si cambia un contrato en la app, el espejo de acá se actualiza **en el mismo cambio**.
 
@@ -49,7 +50,7 @@ Si cambia un contrato en la app, el espejo de acá se actualiza **en el mismo ca
 ```
 src/index.ts     Bootstrap: arranca los workers de BullMQ + el servidor socket.io; graceful shutdown
 src/processors/  Handlers de jobs (email, notificaciones) + el dispatcher por processorKey
-src/chat/        Auth del handshake, autorización del room (ticket) y el flujo de mensajes
+src/chat/        Auth del handshake, autorización del room (membresía en la reserva) y el flujo de mensajes
 src/redis/       Clientes de Redis: workers de BullMQ, pub client y el server socket.io (+ adapter)
 src/mongo/ · src/pg/   Acceso a datos (listados, chats, mensajes, notificaciones · usuarios, reservas)
 ```
@@ -65,8 +66,8 @@ docker compose up -d      # Redis local (opcional)
 npm run dev
 ```
 
-`JWT_SECRET` tiene que ser **el mismo** que el de la app: este proceso verifica los tokens y tickets
-que ella firma.
+`JWT_SECRET` tiene que ser **el mismo** que el de la app: este proceso verifica los tokens que ella
+firma.
 
 ## Comandos
 
@@ -78,4 +79,4 @@ que ella firma.
 
 ## Backlog y decisiones
 
-Los ADRs y la deuda técnica viven en el repo de la app (`bookings_app/docs/`).
+Los ADRs y la deuda técnica viven en el repo de la app (`greenaway/docs/`).
