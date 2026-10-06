@@ -98,7 +98,8 @@ src/
     chats.mongo.ts      upsertChatByBookingId + ChatDocument
 
   chat/                 Feature socket.io partida por responsabilidad (ver "Partición por módulos").
-    types.ts            ClientMessage, SocketData, AppSocket, enum `EVENTS`; re-exporta MessageDocument.
+    types.ts            Contrato del socket (espejo de greenaway/lib/chat/socket.ts): enum `EVENTS`, ClientMessage, DeliveredMessage, Ack, los mapas de eventos tipados, SocketData, AppSocket.
+    validation.ts       parseClientMessage + MAX_MESSAGE_LENGTH: el payload entrante se valida antes de tocar la DB.
     auth.ts             verifyToken + authenticateHandshake (paso 1) + authorizeRoom (paso 2); tipos CurrentUser, ChatParties.
 
   resend.ts             Cliente Resend (singleton).
@@ -274,6 +275,7 @@ responsabilidad** (misma regla que el producer para componentes):
 | Archivo | Responsabilidad |
 |---------|-----------------|
 | `chat/types.ts` | Tipos + enum `EVENTS` compartidos por las piezas. Sin lógica. |
+| `chat/validation.ts` | Validación pura del payload entrante (`parseClientMessage`). |
 | `chat/auth.ts` | `verifyToken` + `authenticateHandshake` (paso 1) + `authorizeRoom` (paso 2); tipos `CurrentUser`/`ChatParties`. |
 | `redis/socket.ts` | Cablea los pasos: handshake, join y el flujo de mensaje emit → persist → deliver (pasos 3–5). |
 
@@ -289,7 +291,10 @@ El chat autoriza en **dos pasos separados**, y esa separación es el diseño:
 - **Message flow (pasos 3–5).** Las partes guardadas al join son la autorización. El `sender_id` sale de
   ellas, nunca del cliente. El documento de chat nace con el primer mensaje (`upsertChatByBookingId`), no
   con el booking. Se **persiste antes de emitir** (`insertMessage` → broadcast); al emisor se lo excluye
-  del broadcast y recibe el `_id` real por `ack` para reemplazar el temporal que pintó optimista.
+  del broadcast y recibe el `id` real por `ack` para reemplazar el temporal que pintó optimista.
+- **Acks.** Tienen la forma del `ServiceResult` de la app: `{ ok: true, data }` o
+  `{ ok: false, code, error }`. Todo camino del handler responde el ack, también si falla la
+  persistencia: el cliente espera esa respuesta para resolver la burbuja.
 
 ---
 
