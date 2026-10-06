@@ -31,9 +31,6 @@ flowchart LR
   PostgreSQL y MongoDB que el usuario sea el guest o el host de esa reserva.
 - **Lee** PostgreSQL y MongoDB para rehidratar datos de notificaciones y persistir mensajes.
 
-El *por qué* del transporte realtime está en
-`greenaway/docs/architecture/real-time-transport-and-fan-out.md`.
-
 ## Contratos espejo — ojo acá
 
 Los dos repos se hablan **solo por contratos replicados a mano** (no hay paquete compartido). La fuente
@@ -41,7 +38,7 @@ de verdad es el repo de la app; este repo mantiene copias:
 
 - **Fila de outbox**: la app la escribe (`OutboxEventType` en `greenaway/lib/outbox/types.ts`) y el
   relay de acá la convierte en jobs. Los payloads de BullMQ (`src/events.ts`) viven solo en este repo.
-  La regla completa está en [`bullmq-queues.md`](./docs/architecture/bullmq-queues.md) (copia idéntica en ambos repos).
+  La regla completa está en [`bullmq-queues.md`](./docs/architecture/bullmq-queues.md).
 - **Contrato de chat** (`src/chat/types.ts`: `EVENTS`, `ClientMessage`, `MessageAck`) ← espejo de
   `greenaway/lib/chat/socket.ts`.
 
@@ -85,4 +82,5 @@ firma.
 
 ## Backlog y decisiones
 
-Los ADRs y la deuda técnica viven en el repo de la app (`greenaway/docs/`).
+Los diagramas de los flujos viven en el repo de la app (`greenaway/docs/diagrams/`); la deuda del
+worker, en `docs/tech-debt/`.

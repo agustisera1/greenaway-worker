@@ -16,10 +16,8 @@ cola (o del canal Redis / evento socket.io). Por eso:
   (`src/chat/types.ts` ↔ `lib/chat/socket.ts`). Los payloads de BullMQ (`src/events.ts`) viven solo acá.
   Cambiar un contrato compartido es un cambio en los dos lados a la vez — ver la **regla del contrato
   espejo** en `docs/architecture/bullmq-queues.md`.
-- **Antes de tocar colas o payloads, leer `docs/architecture/bullmq-queues.md`** (copia idéntica a la
-  del producer). Define reglas del payload, `processorKey`, y el paso a paso en ambos lados.
-- La decisión de transporte en tiempo real (SSE para notificaciones, socket.io para chat, Redis
-  pub/sub como fan-out) vive en el repo del producer: `docs/architecture/real-time-transport-and-fan-out.md`.
+- **Antes de tocar colas o payloads, leer `docs/architecture/bullmq-queues.md`.** Define reglas del
+  payload, `processorKey`, y el paso a paso en ambos lados.
 
 ### Dónde va la deuda técnica
 
