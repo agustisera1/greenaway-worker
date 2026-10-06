@@ -1,9 +1,0 @@
-services:
-  redis:
-    container_name: redis
-    image: redis:8-alpine
-    command: redis-server /usr/local/etc/redis/redis.conf
-    volumes:
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
-    ports:
-      - "6379:6379"

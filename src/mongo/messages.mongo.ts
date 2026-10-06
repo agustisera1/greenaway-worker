@@ -6,7 +6,7 @@ export type MessageDocument = {
   chat_id: string;
   sender_id: string;
   body: string;
-  timestamp: string; // ISO string
+  timestamp: Date;
 };
 
 async function getCollection() {

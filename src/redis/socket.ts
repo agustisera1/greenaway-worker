@@ -84,24 +84,29 @@ io.on("connection", (socket) => {
     try {
       // The chat document is born with the first message: a pending booking can carry
       // questions before the host confirms it.
+      const now = new Date();
       await chatsRepo.upsertChatByBookingId(chat_id, {
         booking_id: chat_id,
         guest_id: parties.guest_id,
         host_id: parties.host_id,
-        started_at: new Date().toISOString(),
+        started_at: now,
       });
 
       const message: MessageDocument = {
         chat_id,
         sender_id: senderId,
         body,
-        timestamp: new Date().toISOString(),
+        timestamp: now,
       };
 
       // Step 4 — Persist: Mongo is the source of truth, so store before delivering.
       const stored = await insertMessage(message);
       if (!stored) throw new Error("insert returned no id");
-      delivered = { ...message, id: stored.insertedId.toString() };
+      delivered = {
+        ...message,
+        id: stored.insertedId.toString(),
+        timestamp: message.timestamp.toISOString(),
+      };
     } catch (error) {
       console.error("[registerMessageFlow]: message not persisted", error);
       return reply({ ok: false, code: "UNEXPECTED", error: "Message not sent" });

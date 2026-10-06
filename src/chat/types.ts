@@ -16,7 +16,8 @@ export enum EVENTS {
   LEAVE_CHAT = "leave-chat",
 }
 
-export type DeliveredMessage = MessageDocument & { id: string };
+// Over the wire the timestamp is ISO-8601: JSON has no Date.
+export type DeliveredMessage = Omit<MessageDocument, "timestamp"> & { id: string; timestamp: string };
 
 // The server stamps everything else: the client is never trusted with it.
 export type ClientMessage = Pick<DeliveredMessage, "chat_id" | "body">;
