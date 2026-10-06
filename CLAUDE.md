@@ -67,7 +67,7 @@ src/
     client.ts           Pub client + `channels` + `publish()` (fan-out de notificaciones a SSE).
     queues.ts           Queues BullMQ (emails, notifications) + defaultJobOptions.
     workers.ts          Workers BullMQ (emails, notifications). Conexión por REDIS_URL, autorun:false.
-    socket.ts           Server socket.io + redis-adapter + CORS. Cablea el handshake (io.use), los joins con chequeo de membresía (JOIN_CHAT/LEAVE_CHAT) y el message flow.
+    socket.ts           Server socket.io + redis-adapter + CORS. Cablea el handshake (io.use), los joins con chequeo de membresía (JOIN_CHAT/LEAVE_CHAT) y el message flow (pasos 3–5).
 
   outbox/
     fan-out.ts          Una fila de outbox -> los QueuedJob que dispara. Rutea por agregado (getUserJob/getBookingJob) y adentro por verbo.
@@ -93,14 +93,13 @@ src/
   mongo/
     index.ts            Cliente Mongo (promise singleton).
     listings.mongo.ts   findListingById + ListingDocument
-    notifications.mongo.ts  insertNotification + NotificationDocument
+    notifications.mongo.ts  insertNotification + NotificationDocumentPayload
     messages.mongo.ts   insertMessage + MessageDocument
-    chats.mongo.ts      findChatByBookingId, upsertChatByBookingId + ChatDocument
+    chats.mongo.ts      upsertChatByBookingId + ChatDocument
 
   chat/                 Feature socket.io partida por responsabilidad (ver "Partición por módulos").
     types.ts            ClientMessage, SocketData, AppSocket, enum `EVENTS`; re-exporta MessageDocument.
     auth.ts             verifyToken + authenticateHandshake (paso 1) + authorizeRoom (paso 2); tipos CurrentUser, ChatParties.
-    message-flow.ts     Pasos 3–5: emit -> persist -> deliver.
 
   resend.ts             Cliente Resend (singleton).
   dates.ts              Formatters de fecha compartidos (formatDate, nightsBetween).
@@ -226,8 +225,8 @@ La **fuente de verdad es la DB**; la entrega en vivo es descartable. El orden es
 primero, emitir después**:
 
 - Notificaciones: `insertNotification` → `publish(channels.notifications(target), ...)`
-  (`processors/notifications.ts`). Si el insert falla, no se publica.
-- Chat: `insertMessage` → `socket.to(room).emit(...)` (`chat/message-flow.ts`).
+  (`notifications/booking.ts`). Si el insert falla, no se publica.
+- Chat: `insertMessage` → `socket.to(room).emit(...)` (`redis/socket.ts`).
 
 Si el cliente está offline, el mensaje perdido se recupera de la DB en el próximo fetch (ver el doc de
 realtime del producer).
@@ -276,9 +275,9 @@ responsabilidad** (misma regla que el producer para componentes):
 |---------|-----------------|
 | `chat/types.ts` | Tipos + enum `EVENTS` compartidos por las piezas. Sin lógica. |
 | `chat/auth.ts` | `verifyToken` + `authenticateHandshake` (paso 1) + `authorizeRoom` (paso 2); tipos `CurrentUser`/`ChatParties`. |
-| `chat/message-flow.ts` | Flujo de mensaje: emit → persist → deliver (pasos 3–5). |
+| `redis/socket.ts` | Cablea los pasos: handshake, join y el flujo de mensaje emit → persist → deliver (pasos 3–5). |
 
-El chat corre sobre **dos credenciales distintas**, y esa separación es el diseño:
+El chat autoriza en **dos pasos separados**, y esa separación es el diseño:
 
 - **Handshake (paso 1) — autentica *quién*.** `io.use(authenticateHandshake)` (`redis/socket.ts`) corre
   una vez por conexión: verifica el JWT de `socket.handshake.auth.token` con `JWT_SECRET` y cuelga el

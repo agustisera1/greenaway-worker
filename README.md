@@ -18,13 +18,15 @@ requests), y es exactamente lo que justifica separar este proceso de la app.
 
 ```mermaid
 flowchart LR
-  APP["greenaway<br/>(encola jobs)"] -->|BullMQ| RD[(Redis)]
-  RD --> WK["greenaway-worker"]
+  APP["greenaway"] -->|escribe el outbox| PG[(PostgreSQL)]
+  PG -->|relay| WK["greenaway-worker"]
+  WK <-->|BullMQ| RD[(Redis)]
   CL[Cliente] <-->|socket.io| WK
-  WK --> PG[(PostgreSQL)] & MG[(MongoDB)]
+  WK --> MG[(MongoDB)]
 ```
 
-- **Consume** de las colas `emails` y `notifications` en Redis; **no** encola nada (eso lo hace la app).
+- **Publica y consume** las colas `emails` y `notifications`: el relay lee las filas pendientes del
+  outbox que escribe la app, las encola en BullMQ y los workers las procesan.
 - **Sirve** el chat por socket.io: handshake autenticado por token; al unirse a un room verifica en
   PostgreSQL y MongoDB que el usuario sea el guest o el host de esa reserva.
 - **Lee** PostgreSQL y MongoDB para rehidratar datos de notificaciones y persistir mensajes.
@@ -48,11 +50,16 @@ Si cambia un contrato en la app, el espejo de acá se actualiza **en el mismo ca
 ## Estructura
 
 ```
-src/index.ts     Bootstrap: arranca los workers de BullMQ + el servidor socket.io; graceful shutdown
-src/processors/  Handlers de jobs (email, notificaciones) + el dispatcher por processorKey
-src/chat/        Auth del handshake, autorización del room (membresía en la reserva) y el flujo de mensajes
-src/redis/       Clientes de Redis: workers de BullMQ, pub client y el server socket.io (+ adapter)
-src/mongo/ · src/pg/   Acceso a datos (listados, chats, mensajes, notificaciones · usuarios, reservas)
+src/index.ts           Bootstrap: arranca el relay, los workers de BullMQ y el servidor socket.io; graceful shutdown
+src/relay.ts           Polling del outbox → encola los jobs → marca la fila como publicada
+src/outbox/            Qué jobs dispara cada fila del outbox (fan-out)
+src/events.ts          Contratos de los jobs de cada cola
+src/processors/        El índice de cada cola: processorKey → handler
+src/emails/            Un archivo por mail (copy + template + handler) y el envío por Resend
+src/notifications/     Notificaciones in-app: documento en Mongo + publish al canal SSE
+src/chat/              Auth del handshake y autorización del room (membresía en la reserva)
+src/redis/             Queues, workers de BullMQ, pub client y el server socket.io (+ adapter)
+src/mongo/ · src/pg/   Acceso a datos (listados, chats, mensajes, notificaciones · usuarios, reservas, outbox)
 ```
 
 ## Cómo correrlo
@@ -75,7 +82,6 @@ firma.
 |---|---|
 | `npm run dev` | watch con `tsx` |
 | `npm run build` · `npm start` | compila a `dist/` · corre lo compilado |
-| `npm test` · `npm run test:watch` | tests (Vitest) |
 
 ## Backlog y decisiones
 
