@@ -7,7 +7,7 @@ export type ChatDocument = {
   booking_id: string;
   guest_id: string;
   host_id: string;
-  started_at: string; // ISO string
+  started_at: Date;
 };
 
 async function getCollection() {
@@ -15,16 +15,8 @@ async function getCollection() {
   return client.db("chatsdb").collection<ChatDocument>("chats");
 }
 
-/**
- * Insert the chat for `bookingId` only if it isn't there yet. `$setOnInsert`
- * leaves an existing document untouched, so re-sending never rewrites
- * `started_at`.
- *
- * Careful: this narrows the race a find-then-insert opens, but doesn't close
- * it — Mongo only makes an upsert atomic when a **unique index** covers the
- * filter, and `chats.booking_id` has none yet. See
- * `greenaway/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`.
- */
+// `$setOnInsert` never rewrites `started_at`; the unique index on `booking_id`
+// (greenaway `pnpm db:indexes`) makes concurrent upserts yield one chat.
 export async function upsertChatByBookingId(
   bookingId: string,
   chat: ChatDocument,
