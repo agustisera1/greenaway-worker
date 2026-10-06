@@ -1,4 +1,0 @@
-# Copiar a redis.conf y reemplazar los passwords reales.
-user default off
-user admin on >CHANGE_ME_ADMIN ~* &* +@all
-user worker on >CHANGE_ME_WORKER ~* &* +@all

@@ -2,7 +2,7 @@
 // outbox pattern the relay is the only producer, so producer and consumer both
 // live in this repo: these types are the single source, not a copy of the app's.
 // Each *Payload stays minimal — only the fields the consumer rehydrates from or
-// renders, never a full domain entity. Ver docs/architecture/BULLMQ_QUEUES.md.
+// renders, never a full domain entity. Ver docs/architecture/bullmq-queues.md.
 
 // El id de la fila de `outbox` que originó el job, y la idempotency key de todo
 // consumer: la emite el relay, así que sobrevive a los reintentos de BullMQ.

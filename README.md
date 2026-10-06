@@ -32,7 +32,7 @@ flowchart LR
 - **Lee** PostgreSQL y MongoDB para rehidratar datos de notificaciones y persistir mensajes.
 
 El *por qué* del transporte realtime está en
-`greenaway/docs/architecture/REAL_TIME_TRANSPORT_AND_FAN_OUT.md`.
+`greenaway/docs/architecture/real-time-transport-and-fan-out.md`.
 
 ## Contratos espejo — ojo acá
 
@@ -41,7 +41,7 @@ de verdad es el repo de la app; este repo mantiene copias:
 
 - **Fila de outbox**: la app la escribe (`OutboxEventType` en `greenaway/lib/outbox/types.ts`) y el
   relay de acá la convierte en jobs. Los payloads de BullMQ (`src/events.ts`) viven solo en este repo.
-  La regla completa está en [`BULLMQ_QUEUES.md`](./docs/architecture/BULLMQ_QUEUES.md) (copia idéntica en ambos repos).
+  La regla completa está en [`bullmq-queues.md`](./docs/architecture/bullmq-queues.md) (copia idéntica en ambos repos).
 - **Contrato de chat** (`src/chat/types.ts`: `EVENTS`, `ClientMessage`, `MessageAck`) ← espejo de
   `greenaway/lib/chat/socket.ts`.
 
@@ -64,12 +64,12 @@ src/mongo/ · src/pg/   Acceso a datos (listados, chats, mensajes, notificacione
 
 ## Cómo correrlo
 
-Requiere Redis (colas + adapter), MongoDB y PostgreSQL accesibles.
+Requiere Redis (colas + adapter), MongoDB y PostgreSQL. Los levanta el repo `greenaway` con
+`pnpm infra:up` (Docker, con schema y seed); este proceso se conecta a esos mismos contenedores.
 
 ```bash
 npm install
 cp .env.example .env      # REDIS_URL · JWT_SECRET · RESEND_API_KEY · Mongo/PG · SOCKET_PORT · CLIENT_ORIGIN
-docker compose up -d      # Redis local (opcional)
 npm run dev
 ```
 

@@ -15,11 +15,11 @@ cola (o del canal Redis / evento socket.io). Por eso:
   escribe, `OutboxEventType` en `lib/outbox/types.ts`; el relay de acá la lee) y los **eventos del chat**
   (`src/chat/types.ts` ↔ `lib/chat/socket.ts`). Los payloads de BullMQ (`src/events.ts`) viven solo acá.
   Cambiar un contrato compartido es un cambio en los dos lados a la vez — ver la **regla del contrato
-  espejo** en `docs/architecture/BULLMQ_QUEUES.md`.
-- **Antes de tocar colas o payloads, leer `docs/architecture/BULLMQ_QUEUES.md`** (copia idéntica a la
+  espejo** en `docs/architecture/bullmq-queues.md`.
+- **Antes de tocar colas o payloads, leer `docs/architecture/bullmq-queues.md`** (copia idéntica a la
   del producer). Define reglas del payload, `processorKey`, y el paso a paso en ambos lados.
 - La decisión de transporte en tiempo real (SSE para notificaciones, socket.io para chat, Redis
-  pub/sub como fan-out) vive en el repo del producer: `docs/architecture/REAL_TIME_TRANSPORT_AND_FAN_OUT.md`.
+  pub/sub como fan-out) vive en el repo del producer: `docs/architecture/real-time-transport-and-fan-out.md`.
 
 ### Dónde va la deuda técnica
 
@@ -28,8 +28,8 @@ de una línea). Y va **scopeada a lo que la genera**:
 
 | Deuda | Dónde |
 |-------|-------|
-| De una feature (chat, notificaciones) | En el doc de esa feature, en el **producer**: `greenaway/docs/tech_debt/<FEATURE>_NEXT_STEPS.md`. La feature cruza los dos repos, así que se documenta una sola vez, del lado que la orquesta |
-| De build/verificación de este repo | `docs/tech_debt/TOOLING.md` |
+| De una feature (chat, notificaciones) | En el doc de esa feature, en el **producer**: `greenaway/docs/tech-debt/<feature>-next-steps.md`. La feature cruza los dos repos, así que se documenta una sola vez, del lado que la orquesta |
+| De build/verificación de este repo | `docs/tech-debt/tooling.md` |
 
 ## Stack
 
@@ -115,7 +115,7 @@ src/
 
 El worker **nunca importa del producer**. Toda entrada llega como payload JSON serializado, y el worker
 redeclara en `src/events.ts` **solo** los campos mínimos que rehidrata o renderiza — nunca las entidades
-de dominio completas. Regla completa: `docs/architecture/BULLMQ_QUEUES.md`.
+de dominio completas. Regla completa: `docs/architecture/bullmq-queues.md`.
 
 ### 2. Arquitectura en capas + cohesión por carpeta
 
@@ -302,7 +302,7 @@ El chat autoriza en **dos pasos separados**, y esa separación es el diseño:
 
 - [ ] ¿Job nuevo? Su `*Payload` en la unión de la cola (`EmailJob`/`NotificationJob`), **un archivo para
       el evento** (`<cola>/<evento>.ts`: copy + builder + handler) y su `case` en el switch. Seguir
-      `docs/architecture/BULLMQ_QUEUES.md`.
+      `docs/architecture/bullmq-queues.md`.
 - [ ] ¿Acceso a datos? Va en el archivo de **esa feature** (`<feature>.pg.ts` / `<feature>.mongo.ts`),
       con prefijo `find`/`insert`/`update`/`delete`, genérico y sin lógica de negocio.
 - [ ] ¿Transformación de datos? Función pura, separada del processor que hace el I/O.

@@ -1,8 +1,6 @@
-# TOOLING.md — Deuda de tooling del worker
+# tooling.md — Deuda de tooling del worker
 
-Deuda del entorno de build/verificación, no del código de dominio. La deuda funcional de cada
-feature vive scopeada aparte (la de chat, en
-`greenaway/docs/tech_debt/CHAT_FEATURE_NEXT_STEPS.md`).
+Deuda del entorno de build/verificación, no del código de dominio.
 
 ---
 
