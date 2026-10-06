@@ -1,8 +1,7 @@
 import mongo from "./index.js";
 
-// A chat message as persisted. Mongo mints `_id` on insert, so the stored shape
-// doesn't carry one — the delivered shape does (`DeliveredMessage` in
-// chat/types.ts). The booking's id doubles as `chat_id`.
+// A chat message as persisted: Mongo mints `_id` on insert, delivered as `id`
+// (`DeliveredMessage` in chat/types.ts). The booking's id doubles as `chat_id`.
 export type MessageDocument = {
   chat_id: string;
   sender_id: string;
