@@ -11,22 +11,26 @@ const queues = {
 class Relay {
   running = false;
   interval = 10_000; // Every 10 secs
-  events: Outbox[] = [];
+  private loop: Promise<void> | null = null;
+  private wake: (() => void) | null = null;
 
-  constructor() {
+  start = () => {
     this.running = true;
-    this.events = [];
-  }
-
-  stop = () => {
-    this.running = false;
+    this.loop = this.run();
   };
 
-  start = async () => {
+  // Lets the tick in flight finish, so no row is left between its add() and its mark.
+  stop = async () => {
+    this.running = false;
+    this.wake?.();
+    await this.loop;
+  };
+
+  private run = async () => {
     while (this.running) {
       try {
-        await this.pollEvents();
-        await this.dispatch();
+        const events = await outboxRepo.findPendingEvents();
+        for (const event of events) await this.dispatchEvent(event);
       } catch (err) {
         console.error("[relay]: poll/dispatch failed", err);
       }
@@ -35,7 +39,7 @@ class Relay {
     }
   };
 
-  dispatchEvent = async (event: Outbox) => {
+  private dispatchEvent = async (event: Outbox) => {
     try {
       const jobs = await toJobs(event);
 
@@ -53,25 +57,15 @@ class Relay {
     }
   };
 
-  dispatch = async () => {
-    if (this.events.length === 0) return;
-    for (const event of this.events) {
-      await this.dispatchEvent(event);
-    }
-  };
-
-  sleep() {
-    return new Promise((resolve) => setTimeout(resolve, this.interval));
+  private sleep() {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, this.interval);
+      this.wake = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
   }
-
-  pollEvents = async () => {
-    try {
-      const pending = await outboxRepo.findPendingEvents();
-      this.events = pending;
-    } catch {
-      console.error("[pollEvents]: Could not retrieve the events from DB");
-    }
-  };
 }
 
 export const relay = new Relay();

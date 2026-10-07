@@ -1,5 +1,6 @@
 import "dotenv/config.js";
 import { emailsWorker, notificationsWorker } from "./redis/workers.js";
+import { emailsQueue, notificationsQueue } from "./redis/queues.js";
 import { pubClient } from "./redis/client.js";
 import { io as chatServer } from "./redis/socket.js";
 import { relay } from "./relay.js";
@@ -14,9 +15,20 @@ for (const worker of [emailsWorker, notificationsWorker]) {
   const label = `[${worker.name}Worker]`;
   worker.on("error", (err) => console.error(label, err));
   worker.on("failed", (job, err) =>
-    console.error(label, job?.name, "failed with error", err),
+    console.error(label, "job", job?.id, "event", job?.data.eventId, "failed:", err),
   );
 }
+
+for (const queue of [emailsQueue, notificationsQueue]) {
+  queue.on("error", (err) => console.error(`[${queue.name}Queue]`, err));
+}
+
+process.on("uncaughtException", (err) => {
+  console.error("[process]: uncaught exception", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[process]: unhandled rejection", reason);
+});
 
 // Startup order matters: the notifications processor publishes on `pubClient`,
 // so that connection must be up before the workers start pulling jobs. The
@@ -47,13 +59,13 @@ initialize().catch((err) => {
   process.exit(1);
 });
 
-// Graceful shutdown. worker.close() stops the loop and closes the worker's own
-// BullMQ connection; `pubClient` is ours, so we close it explicitly.
+// Producer before consumers: the relay stops feeding the queues, then each worker
+// finishes its active jobs, which may still publish on `pubClient`.
 async function shutdown() {
-  await emailsWorker.close();
-  await notificationsWorker.close();
+  await relay.stop();
+  await Promise.all([emailsWorker.close(), notificationsWorker.close()]);
+  await Promise.all([emailsQueue.close(), notificationsQueue.close()]);
   await pubClient.close();
-  relay.stop();
   console.info("[shutdown]: connections closed");
   process.exit(0);
 }
