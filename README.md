@@ -1,10 +1,10 @@
 # ⚙️ greenaway-worker
 
 Proceso persistente de **Greenaway** (repo principal: `greenaway`) — hace todo lo que la app
-Next.js (serverless) no puede sostener por sí misma:
+Next.js no puede sostener por sí misma:
 
-- **Consumers de BullMQ** — envían los emails de reserva y arman las notificaciones in-app, de forma
-  asíncrona (la app encola; este proceso ejecuta).
+- **Relay del outbox + consumers de BullMQ** — publica en las colas lo que la app registró en el
+  outbox, y los consumers envían los emails de reserva y arman las notificaciones in-app.
 - **Servidor socket.io** — el chat host↔guest en vivo, con su Redis adapter para el fan-out entre
   instancias.
 
@@ -80,7 +80,8 @@ firma.
 | `npm run dev` | watch con `tsx` |
 | `npm run build` · `npm start` | compila a `dist/` · corre lo compilado |
 
-## Backlog y decisiones
+## Limitaciones conocidas
 
-Los diagramas de los flujos viven en el repo de la app (`greenaway/docs/diagrams/`); la deuda del
-worker, en `docs/tech-debt/`.
+- Sin linter ni tests: las piezas puras (`toJobs`, `buildNotification`, los templates) están escritas
+  para testearse sin Redis ni DB, pero todavía no tienen tests.
+- Las del sistema completo están en el README de `greenaway`.

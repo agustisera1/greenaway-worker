@@ -1,7 +1,6 @@
 import type { Booking, BookingPayload, NotificationType } from "../events.js";
 import { formatDate, nightsBetween } from "../dates.js";
 import { formatAddress, formatMoney } from "../utils.js";
-import * as eventsRepo from "../pg/events.pg.js";
 import { sendEmail } from "./send.js";
 
 // The booking email, end to end: the handler the "emails" queue routes to, its
@@ -16,21 +15,17 @@ const subjects: Record<NotificationType, string> = {
   cancelled: "Reservation cancelled",
 };
 
+// The key makes Resend drop a retry of the same send within 24h.
 export async function notifyBooking(payload: BookingPayload) {
-  const claimed = await eventsRepo.insertEvent(
-    payload.eventId,
-    payload.processorKey,
+  await sendEmail(
+    "notifyBooking",
+    {
+      to: payload.guest.email,
+      subject: `${subjects[payload.type]}: ${payload.listing.title}`,
+      html: bookingEmailHtml(payload, payload.type),
+    },
+    `${payload.processorKey}/${payload.eventId}`,
   );
-  if (!claimed) {
-    console.info("[notifyBooking]: already sent for", payload.eventId);
-    return;
-  }
-
-  await sendEmail("notifyBooking", {
-    to: payload.guest.email,
-    subject: `${subjects[payload.type]}: ${payload.listing.title}`,
-    html: bookingEmailHtml(payload, payload.type),
-  });
 }
 
 // Per-type copy. Kept intentionally simple: only the header, status pill and
