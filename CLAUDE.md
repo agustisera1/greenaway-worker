@@ -67,7 +67,8 @@ src/
 - **Chat:** el handshake autentica (JWT); el join autoriza contra la reserva; el `sender_id` sale
   del servidor; se persiste antes de emitir y todo camino responde el ack.
 - **Config por env**, clients singleton a nivel módulo. **Imports relativos con `.js`** (NodeNext).
-- **Comentarios:** solo lo que no se deduce del código, máximo 2 líneas.
+- **Comentarios:** solo lo que no se deduce del código, máximo 2 líneas (lo aplica el hook
+  `.claude/hooks/check-comments.mjs`).
 
 ## Checklist al agregar código
 
