@@ -51,7 +51,6 @@ src/index.ts           Bootstrap: arranca el relay, los workers de BullMQ y el s
 src/relay.ts           Polling del outbox → encola los jobs → marca la fila como publicada
 src/outbox/            Qué jobs dispara cada fila del outbox (fan-out)
 src/events.ts          Contratos de los jobs de cada cola
-src/processors/        El índice de cada cola: processorKey → handler
 src/emails/            Un archivo por mail (copy + template + handler) y el envío por Resend
 src/notifications/     Notificaciones in-app: documento en Mongo + publish al canal SSE
 src/chat/              Auth del handshake y autorización del room (membresía en la reserva)
@@ -79,9 +78,10 @@ firma.
 |---|---|
 | `npm run dev` | watch con `tsx` |
 | `npm run build` · `npm start` | compila a `dist/` · corre lo compilado |
+| `npm test` | tests de las piezas puras (vitest) |
 
 ## Limitaciones conocidas
 
-- Sin linter ni tests: las piezas puras (`toJobs`, `buildNotification`, los templates) están escritas
-  para testearse sin Redis ni DB, pero todavía no tienen tests.
-- Las del sistema completo están en el README de `greenaway`.
+- Sin linter. Solo el copy de las notificaciones (`src/notifications/content.ts`) tiene tests; el
+  fan-out y los templates de mail no.
+- Las del sistema completo están en `greenaway/docs/known-limitations.md`.

@@ -28,7 +28,8 @@ Node + TypeScript (ESM, `module: NodeNext`, `tsx` en dev) · BullMQ sobre Redis 
 
 ```bash
 npm run dev      # tsx watch src/index.ts
-npm run build    # tsc -> dist/ (la verificación del repo: no hay lint ni tests)
+npm run build    # tsc -> dist/ (la verificación del repo: no hay lint)
+npm test         # vitest, solo las piezas puras
 npm start        # node dist/index.js
 ```
 
@@ -37,12 +38,11 @@ npm start        # node dist/index.js
 ```
 src/
   index.ts        Bootstrap: clients, listeners de error, relay, workers, shutdown.
-  events.ts       Payloads de las colas + la unión de jobs de cada cola.
+  events.ts       Payload de cada cola (un tipo de job por cola).
   relay.ts        Polling del outbox -> toJobs -> queue.add -> markAsPublished.
-  outbox/         fan-out.ts: una fila de outbox -> sus jobs (por agregado y verbo).
-  processors/     El índice de cada cola: switch de processorKey -> handler.
+  outbox/         fan-out.ts: una fila de outbox -> su notificación y su mail.
   emails/         Un archivo por mail (copy + template + handler) y send.ts (Resend).
-  notifications/  Notificación in-app: documento en Mongo + publish al canal SSE.
+  notifications/  content.ts arma el documento (puro); booking.ts lo guarda en Mongo y lo publica.
   chat/           Tipos, validación y auth (handshake + membresía del room) del socket.
   redis/          Queues, workers, pub client y el server socket.io.
   pg/ · mongo/    Acceso a datos, un archivo por feature (users.pg.ts, chats.mongo.ts…).
@@ -51,14 +51,14 @@ src/
 
 ## Patrones
 
-- **Capas:** `index` → `redis/` + `relay` → `processors/` + `chat/` → `emails/` + `notifications/` →
-  `pg/` + `mongo/`. Cada capa solo conoce a la de abajo; los clients de infra no conocen dominio.
+- **Capas:** `index` → `redis/` + `relay` → `chat/` + `emails/` + `notifications/` → `pg/` + `mongo/`.
+  Cada capa solo conoce a la de abajo; los clients de infra no conocen dominio.
 - **Repos:** un archivo por feature con sufijo de DB, una función por operación, prefijos
   `find`/`insert`/`update`/`delete`. Sin lógica de negocio: las decisiones van en el handler.
-- **Processor = índice de la cola:** un `case` por `processorKey`; el `default` asigna a `never`, así
-  que un job sin su `case` no compila. El trabajo vive en el archivo del evento.
-- **Puro separado de I/O:** builders y templates puros (`buildNotification`, `toJobs`); el handler
-  hace el I/O alrededor.
+- **Worker → handler directo:** cada `Worker` llama a su handler con `job.data` tipado; no hay capa
+  de ruteo en el medio.
+- **Puro separado de I/O:** el copy y los templates son puros (`bookingNotification` tiene test); el
+  handler hace el I/O alrededor.
 - **Copy por tipo con `Record<Type, …>`**, no cadenas de `if/else`. Formatters de `dates.ts`/`utils.ts`.
 - **Persistir antes de emitir:** la DB es la fuente de verdad; el publish/emit es best-effort.
 - **Errores:** un handler que no puede completar tira un `Error` y BullMQ reintenta; un error
@@ -76,4 +76,4 @@ src/
 - [ ] ¿Acceso a datos? En el archivo de esa feature, genérico y sin lógica de negocio.
 - [ ] Persistir antes de emitir; handler que falla → `throw`.
 - [ ] Imports relativos con `.js`.
-- [ ] `npm run build` verde.
+- [ ] `npm test` y `npm run build` verdes.

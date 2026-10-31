@@ -1,59 +1,27 @@
-import type { JobsOptions } from "bullmq";
-import type {
-  BookingPayload,
-  EmailJob,
-  InAppNotificationType,
-  NotificationJob,
-  NotificationType,
-} from "../events.js";
+import type { BookingEvent, EmailJob, NotificationJob, NotificationType } from "../events.js";
 import type { Booking, Outbox } from "../pg/index.js";
 import { findBookingById } from "../pg/bookings.pg.js";
 import { findUserById } from "../pg/users.pg.js";
 import { findListingById } from "../mongo/listings.mongo.js";
+import { bookingNotification } from "../notifications/content.js";
 
-// A job ready to be enqueued: which queue it belongs to, plus the wire payload.
-// The relay is what resolves `queue` to the real BullMQ Queue — keeping this
-// module free of Redis is what makes the fan-out testable without a connection.
-export type QueuedJob =
-  | { queue: "emails"; data: EmailJob; opts: JobsOptions }
-  | { queue: "notifications"; data: NotificationJob; opts: JobsOptions };
-
-// What each booking transition announces. `recipient` is who the in-app
-// notification is for — always the party that did NOT act, since the actor
-// already knows what they did.
-type BookingEventSpec = {
-  email: NotificationType;
-  notify: InAppNotificationType;
-  recipient: "host" | "guest" | "counterparty";
+export type BookingJobs = {
+  verb: BookingEvent;
+  bookingId: string;
+  notification: NotificationJob;
+  email: EmailJob;
 };
 
-const BOOKING_EVENTS = {
-  "booking.created": {
-    email: "pending",
-    notify: "notify_user",
-    recipient: "host",
-  },
-  "booking.accepted": {
-    email: "approved",
-    notify: "notify_booking_update",
-    recipient: "guest",
-  },
-  "booking.rejected": {
-    email: "rejected",
-    notify: "notify_booking_update",
-    recipient: "guest",
-  },
-  // Either party can cancel, so the counterparty is only known from the row.
-  "booking.cancelled": {
-    email: "cancelled",
-    notify: "notify_booking_update",
-    recipient: "counterparty",
-  },
-} as const satisfies Record<string, BookingEventSpec>;
+// Each outbox event type, with the email stage it announces.
+const EVENTS: Record<string, { verb: BookingEvent; email: NotificationType }> = {
+  "booking.created": { verb: "created", email: "pending" },
+  "booking.accepted": { verb: "accepted", email: "approved" },
+  "booking.rejected": { verb: "rejected", email: "rejected" },
+  "booking.cancelled": { verb: "cancelled", email: "cancelled" },
+};
 
-// Mirrors pgBookingToEmailBooking in the API: NUMERIC columns come back from pg
-// as strings, and the template expects ISO timestamps.
-function toEmailBooking(booking: Booking): BookingPayload["booking"] {
+// NUMERIC columns come back from pg as strings, and the template expects ISO timestamps.
+function toEmailBooking(booking: Booking): EmailJob["booking"] {
   return {
     id: booking.id,
     checkIn: new Date(booking.start_date).toISOString(),
@@ -66,14 +34,16 @@ function toEmailBooking(booking: Booking): BookingPayload["booking"] {
   };
 }
 
-// The outbox row carries ids only, so everything the payloads render is read
-// back here — the write path never paid for these lookups.
-async function bookingEvent(
-  eventId: string,
-  bookingId: string,
-  spec: BookingEventSpec,
-): Promise<QueuedJob[] | null> {
-  const booking = await findBookingById(bookingId);
+// The row carries ids only, so everything the jobs render is read here. `null`: it can never be
+// published (unknown type, or its booking is gone), so the relay drops it instead of retrying.
+export async function toJobs(event: Outbox): Promise<BookingJobs | null> {
+  const spec = EVENTS[event.event_type];
+  if (!spec) {
+    console.error("[toJobs]: unknown event_type", event.event_type, event.id);
+    return null;
+  }
+
+  const booking = await findBookingById(event.aggregate_id);
   if (!booking) return null;
 
   const [guest, listing] = await Promise.all([
@@ -85,117 +55,34 @@ async function bookingEvent(
   const host = await findUserById(listing.host_id);
   if (!host) return null;
 
-  const counterparty = booking.cancelled_by === "guest" ? host : guest;
-  const recipient =
-    spec.recipient === "counterparty"
-      ? counterparty
-      : spec.recipient === "host"
-        ? host
-        : guest;
-
-  return [
-    {
-      queue: "notifications",
-      data: {
-        eventId,
-        processorKey: "send-notification",
-        type: spec.notify,
-        listingId: listing._id,
-        bookingId: booking.id,
-        userId: recipient.id,
-      },
-      // At-least-once: a relay that publishes and dies before marking the row
-      // republishes it on the next tick. The key collapses those into one job.
-      opts: { jobId: `notification-${booking.id}-${spec.email}` },
+  return {
+    verb: spec.verb,
+    bookingId: booking.id,
+    notification: {
+      eventId: event.id,
+      notification: bookingNotification({
+        eventId: event.id,
+        event: spec.verb,
+        booking,
+        listing,
+        guest,
+        host,
+      }),
     },
-    {
-      queue: "emails",
-      data: {
-        eventId,
-        processorKey: "notify-booking",
-        type: spec.email,
-        guest: { email: guest.email },
-        booking: toEmailBooking(booking),
-        host: { name: host.name },
-        listing: {
-          title: listing.title,
-          location: {
-            address: listing.location.address,
-            city: listing.location.city,
-            country: listing.location.country,
-          },
+    email: {
+      eventId: event.id,
+      type: spec.email,
+      guest: { email: guest.email },
+      booking: toEmailBooking(booking),
+      host: { name: host.name },
+      listing: {
+        title: listing.title,
+        location: {
+          address: listing.location.address,
+          city: listing.location.city,
+          country: listing.location.country,
         },
       },
-      opts: { jobId: `booking-${booking.id}-${spec.email}` },
     },
-  ];
-}
-
-// Segundo nivel del agregado `booking`: el verbo sale de la tabla de arriba.
-async function getBookingJob(event: Outbox): Promise<QueuedJob[] | null> {
-  const spec: BookingEventSpec | undefined =
-    BOOKING_EVENTS[event.event_type as keyof typeof BOOKING_EVENTS];
-
-  if (!spec) {
-    console.error(
-      "[getBookingJob]: unknown event_type",
-      event.event_type,
-      event.id,
-    );
-    return null;
-  }
-
-  return bookingEvent(event.id, event.aggregate_id, spec);
-}
-
-async function userRegistered(
-  eventId: string,
-  userId: string,
-): Promise<QueuedJob[] | null> {
-  const user = await findUserById(userId);
-  if (!user) return null;
-
-  return [
-    {
-      queue: "emails",
-      data: { eventId, processorKey: "greet-user", email: user.email },
-      opts: { jobId: `greet-${user.id}` },
-    },
-  ];
-}
-
-// Segundo nivel del agregado `user`: un `case` por verbo.
-async function getUserJob(event: Outbox): Promise<QueuedJob[] | null> {
-  switch (event.event_type) {
-    case "user.registered":
-      return userRegistered(event.id, event.aggregate_id);
-    default:
-      console.error(
-        "[getUserJob]: unknown event_type",
-        event.event_type,
-        event.id,
-      );
-      return null;
-  }
-}
-
-/**
- * Turns an outbox row into the jobs it fans out to.
- *
- * Primer nivel: el `event_type` es `<agregado>.<verbo>`, así que el prefijo elige
- * el resolver y cada resolver se ocupa de sus propios verbos.
- *
- * `null` means the row can never be published — unknown event type, or its
- * aggregate is gone — so the relay drops it. Without that distinction a single
- * unrehydratable row is retried on every tick, forever.
- */
-export async function toJobs(event: Outbox): Promise<QueuedJob[] | null> {
-  const isUserEvent = event.event_type.startsWith("user.");
-  const isBookingEvent = event.event_type.startsWith("booking.");
-
-  if (isUserEvent) return getUserJob(event);
-  if (isBookingEvent) return getBookingJob(event);
-
-  console.error("[toJobs]: unknown aggregate", event.event_type, event.id);
-  return null;
+  };
 }

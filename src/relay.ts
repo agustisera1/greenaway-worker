@@ -3,11 +3,6 @@ import { Outbox } from "./pg/index.js";
 import * as outboxRepo from "./pg/outbox.pg.js";
 import { toJobs } from "./outbox/fan-out.js";
 
-const queues = {
-  emails: emailsQueue,
-  notifications: notificationsQueue,
-};
-
 class Relay {
   running = false;
   interval = 10_000; // Every 10 secs
@@ -43,8 +38,13 @@ class Relay {
     try {
       const jobs = await toJobs(event);
 
-      for (const job of jobs ?? []) {
-        await queues[job.queue].add(job.queue, job.data, job.opts);
+      // The jobId names the fact (booking + verb): a row republished after a crash isn't enqueued twice.
+      if (jobs) {
+        const { verb, bookingId } = jobs;
+        await notificationsQueue.add("notifications", jobs.notification, {
+          jobId: `notification-${bookingId}-${verb}`,
+        });
+        await emailsQueue.add("emails", jobs.email, { jobId: `booking-${bookingId}-${verb}` });
       }
 
       // at-least-once

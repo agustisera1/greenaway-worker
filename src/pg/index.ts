@@ -15,12 +15,6 @@ export const query = <R extends QueryResultRow = QueryResultRow>(
   return pool.query<R>(text, params);
 };
 
-export type PgProcessedEvent = {
-  event_id: string; //PK
-  consumer: string; //PK
-  processed_at: string;
-};
-
 export type PgUser = {
   id: string;
   email: string;
@@ -59,10 +53,3 @@ export type Outbox = {
   created_at: string;
   published_at: string | null;
 };
-
-export type NotificationType =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "updated"
-  | "cancelled";
