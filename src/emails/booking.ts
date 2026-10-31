@@ -1,4 +1,4 @@
-import type { Booking, BookingPayload, NotificationType } from "../events.js";
+import type { Booking, EmailJob, NotificationType } from "../events.js";
 import { formatDate, nightsBetween } from "../dates.js";
 import { formatAddress, formatMoney } from "../utils.js";
 import { sendEmail } from "./send.js";
@@ -11,12 +11,11 @@ const subjects: Record<NotificationType, string> = {
   approved: "Reservation approved",
   pending: "Reservation pending",
   rejected: "Reservation rejected",
-  updated: "Reservation updated",
   cancelled: "Reservation cancelled",
 };
 
 // The key makes Resend drop a retry of the same send within 24h.
-export async function notifyBooking(payload: BookingPayload) {
+export async function notifyBooking(payload: EmailJob) {
   await sendEmail(
     "notifyBooking",
     {
@@ -24,7 +23,7 @@ export async function notifyBooking(payload: BookingPayload) {
       subject: `${subjects[payload.type]}: ${payload.listing.title}`,
       html: bookingEmailHtml(payload, payload.type),
     },
-    `${payload.processorKey}/${payload.eventId}`,
+    `notify-booking/${payload.eventId}`,
   );
 }
 
@@ -56,12 +55,6 @@ const notificationCopy: Record<
     intro: (host) =>
       `Unfortunately, <strong>${host}</strong> could not confirm your reservation. Any payment made will be refunded.`,
   },
-  updated: {
-    heading: "Booking Updated",
-    status: "Status: Updated",
-    intro: (host) =>
-      `Your reservation details have been updated by <strong>${host}</strong>. Please review the information below.`,
-  },
   // Always addressed to the guest, but the copy turns on who cancelled: a host
   // cancelling is an apology, a guest cancelling is a receipt. Says the refund
   // amount without explaining the rule behind it — that rule lives in the app's
@@ -84,8 +77,8 @@ const notificationCopy: Record<
 };
 
 function bookingEmailHtml(
-  { guest, booking, host, listing }: BookingPayload,
-  type: NotificationType = "updated",
+  { guest, booking, host, listing }: EmailJob,
+  type: NotificationType,
 ) {
   const nights = nightsBetween(booking.checkIn, booking.checkOut);
   const total = formatMoney(booking.totalPrice);
